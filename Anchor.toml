@@ -11,10 +11,11 @@ pushsolanalocker = "FVnnKN3tmbSuWcHbc8anrXZnzETHn96FdaKcJxamrfFx"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
-wallet = "./phantom-keypair.json"
+# cluster = "Localnet"
 # cluster = "https://api.devnet.solana.com"
-# wallet = "./phantom-keypair.json"
+cluster = "https://api.testnet.solana.com"
+wallet = "./phantom-keypair.json"
+
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

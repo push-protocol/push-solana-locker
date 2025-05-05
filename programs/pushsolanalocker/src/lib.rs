@@ -37,7 +37,7 @@ pub mod pushsolanalocker {
 
         emit!(FundsAddedEvent {
             user: ctx.accounts.user.key(),
-            usdt_amount: amount / 10_000_000,
+            sol_amount: amount,
             transaction_hash,
         });
 
@@ -151,7 +151,7 @@ pub enum LockerError {
 #[event]
 pub struct FundsAddedEvent {
     pub user: Pubkey,
-    pub usdt_amount: u64,
+    pub sol_amount: u64,
     pub transaction_hash: [u8; 32],
 }
 
