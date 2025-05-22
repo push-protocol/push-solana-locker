@@ -24,7 +24,8 @@ const userKeypair = Keypair.fromSecretKey(
 );
 
 // Set up connection and provider
-const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+const connection = new Connection("https://api.testnet.solana.com", "confirmed");
+// const connection = new Connection("https://api.devnet.solana.com", "confirmed");
 const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(adminKeypair), {
   commitment: "confirmed",
 });
@@ -53,7 +54,7 @@ async function run() {
     const tx = await program.methods
       .initialize()
       .accounts({
-        locker: lockerPda,
+        locker_data: lockerPda,
         vault: vaultPda,
         admin: admin,
         systemProgram: SystemProgram.programId,
@@ -73,6 +74,7 @@ async function run() {
 
   const amount = new anchor.BN(0.05 * LAMPORTS_PER_SOL);
   const dummyTxHash = new Uint8Array(32).fill(1);
+  console.log(`Locker: ${lockerPda}`);
 
   const tx1 = await program.methods
     .addFunds(amount, dummyTxHash)
