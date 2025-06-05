@@ -5,15 +5,15 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-pushsolanalocker = "FVnnKN3tmbSuWcHbc8anrXZnzETHn96FdaKcJxamrfFx"
+pushsolanalocker = "3zrWaMknHTRQpZSxY4BvQxw9TStSXiHcmcp3NMPTFkke"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
 # cluster = "Localnet"
-# cluster = "https://api.devnet.solana.com"
-cluster = "https://api.testnet.solana.com"
+cluster = "https://api.devnet.solana.com"
+# cluster = "https://api.testnet.solana.com"
 wallet = "./phantom-keypair.json"
 
 
