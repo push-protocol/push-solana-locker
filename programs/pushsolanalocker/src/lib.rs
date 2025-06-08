@@ -17,16 +17,9 @@ fn calculate_sol_price(price_update: &Account<PriceUpdateV2>) -> Result<PriceDat
 
     require!(price.price > 0, LockerError::InvalidPrice);
 
-    let normalized_price = if price.exponent >= 0 {
-        price.price as u64 * 10_u64.pow(price.exponent as u32)
-    } else {
-        (price.price as u64) / 10_u64.pow((-price.exponent) as u32)
-    };
-
     Ok(PriceData {
         price: price.price,
         exponent: price.exponent,
-        normalized_price,
         publish_time: price.publish_time,
         confidence: price.conf,
     })
@@ -60,7 +53,8 @@ pub mod pushsolanalocker {
         // Calculate USD equivalent
         // amount is in lamports (1 SOL = 1e9 lamports)
         let sol_amount_f64 = amount as f64 / 1_000_000_000.0;
-        let usd_equivalent = (sol_amount_f64 * price_data.normalized_price as f64) as u64;
+        let price_f64 = price_data.price as f64;
+        let usd_equivalent = (sol_amount_f64 * price_f64).round() as i128;  // Keep raw number with price's exponent
 
         // Transfer SOL to vault
         invoke(
@@ -77,6 +71,7 @@ pub mod pushsolanalocker {
             user: ctx.accounts.user.key(),
             sol_amount: amount,
             usd_equivalent,
+            usd_exponent: price_data.exponent,
             transaction_hash,
         });
 
@@ -189,7 +184,6 @@ pub struct GetSolPrice<'info> {
 pub struct PriceData {
     pub price: i64,            // Raw price from Pyth
     pub exponent: i32,         // Exponent to apply
-    pub normalized_price: u64, // Price in USD (e.g., 164 for $164)
     pub publish_time: i64,     // When the price was published
     pub confidence: u64,       // Price confidence interval
 }
@@ -216,8 +210,9 @@ pub enum LockerError {
 #[event]
 pub struct FundsAddedEvent {
     pub user: Pubkey,
-    pub sol_amount: u64,     // Amount in lamports
-    pub usd_equivalent: u64, // USD value at time of transaction
+    pub sol_amount: u64,            // Amount in lamports
+    pub usd_equivalent: i128,       // USD amount as integer
+    pub usd_exponent: i32,          // Exponent, like Pyth (e.g., -6)
     pub transaction_hash: [u8; 32],
 }
 
