@@ -26,14 +26,18 @@ const userKeypair = Keypair.fromSecretKey(
 
 // Set up connection and provider
 const connection = new Connection("https://api.devnet.solana.com", "confirmed");
-const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(adminKeypair), {
+const adminProvider = new anchor.AnchorProvider(connection, new anchor.Wallet(adminKeypair), {
   commitment: "confirmed",
 });
-anchor.setProvider(provider);
+const userProvider = new anchor.AnchorProvider(connection, new anchor.Wallet(userKeypair), {
+  commitment: "confirmed",
+});
+anchor.setProvider(adminProvider);  // Set admin as default provider
 
 // Load IDL
 const idl = JSON.parse(fs.readFileSync("target/idl/pushsolanalocker.json", "utf8"));
-const program = new Program(idl as Pushsolanalocker, provider);
+const program = new Program(idl as Pushsolanalocker, adminProvider);
+const userProgram = new Program(idl as Pushsolanalocker, userProvider);  // Create program instance for user
 
 async function run() {
   const [lockerPda] = PublicKey.findProgramAddressSync(
@@ -60,10 +64,10 @@ async function run() {
       })
       .view();
 
-    const usdPrice = priceData.exponent >= 0 
+    const usdPrice = priceData.exponent >= 0
       ? priceData.price * Math.pow(10, priceData.exponent)
       : priceData.price / Math.pow(10, Math.abs(priceData.exponent));
-    
+
     console.log(`✅ SOL Price: ${usdPrice.toFixed(2)} USD`);
     console.log(`⏰ Published: ${new Date(priceData.publishTime * 1000).toISOString()}\n`);
   } catch (error) {
@@ -99,36 +103,63 @@ async function run() {
   console.log(`🏦 Vault balance BEFORE: ${vaultBalanceBefore / LAMPORTS_PER_SOL} SOL`);
 
   const amount = new anchor.BN(0.05 * LAMPORTS_PER_SOL);
-  
+  const estimatedFee = 0.000005 * LAMPORTS_PER_SOL;  // 5000 lamports for fee
+  const totalNeeded = amount.toNumber() + estimatedFee;
+
   // Check if user has enough SOL, if not, transfer from admin
-  if (userBalanceBefore < amount.toNumber()) {
+  if (userBalanceBefore < totalNeeded) {
     console.log("💰 User has insufficient funds, transferring from admin...");
+    console.log(`Current user balance: ${userBalanceBefore / LAMPORTS_PER_SOL} SOL`);
+    console.log(`Amount needed: ${amount.toNumber() / LAMPORTS_PER_SOL} SOL`);
+    console.log(`Estimated fee: ${estimatedFee / LAMPORTS_PER_SOL} SOL`);
+    console.log(`Total needed: ${totalNeeded / LAMPORTS_PER_SOL} SOL`);
+
+    const transferAmount = totalNeeded + 0.01 * LAMPORTS_PER_SOL;  // Add extra 0.01 SOL for safety
+    console.log(`Total transfer amount: ${transferAmount / LAMPORTS_PER_SOL} SOL`);
+
     const transferIx = SystemProgram.transfer({
       fromPubkey: admin,
       toPubkey: user,
-      lamports: 0.1 * LAMPORTS_PER_SOL,
+      lamports: transferAmount,
     });
     const transferTx = new anchor.web3.Transaction().add(transferIx);
-    await provider.sendAndConfirm(transferTx, [adminKeypair]);
-    
+    await adminProvider.sendAndConfirm(transferTx, [adminKeypair]);
+
     const newUserBalance = await connection.getBalance(user);
     console.log(`✅ Transferred SOL. User balance now: ${newUserBalance / LAMPORTS_PER_SOL} SOL`);
+
+    // Double check if user has enough balance
+    if (newUserBalance < totalNeeded) {
+      console.log("❌ User still has insufficient funds after transfer!");
+      process.exit(1);
+    }
   }
 
   const dummyTxHash = new Uint8Array(32).fill(1);
 
   // Set up REAL event listener - no timeouts, no fallbacks
   console.log("📡 Setting up REAL event listener...");
-  const listener = program.addEventListener('fundsAddedEvent', (event: any, slot: number) => {
+  let eventReceived = false;
+
+  // Set up listener BEFORE the transaction
+  const listener = userProgram.addEventListener('fundsAddedEvent', (event: any, slot: number) => {
+    eventReceived = true;
     console.log("\n📡 REAL FundsAddedEvent received:");
     console.log(`📍 Slot: ${slot}`);
     console.log(`👤 User: ${event.user.toString()}`);
     console.log(`💰 SOL Amount: ${event.solAmount.toString()} lamports (${event.solAmount / LAMPORTS_PER_SOL} SOL)`);
-    console.log(`💵 USD Equivalent: $${(event.usdEquivalent / 100).toFixed(2)}`);
-    console.log(`📊 SOL Price at time: $${(event.solPriceAtTime / 100).toFixed(2)}`);
-  });
 
-  const tx1 = await program.methods
+    // Calculate USD value using the raw number and exponent
+    const usdValue = event.usdEquivalent * Math.pow(10, event.usdExponent);
+    console.log(`💵 USD Equivalent: $${usdValue.toFixed(2)} (raw: ${event.usdEquivalent}, exp: ${event.usdExponent})`);
+    console.log(`🔗 Transaction Hash: ${Buffer.from(event.transactionHash).toString('hex')}`);
+  }, "confirmed");
+
+  // Wait a moment to ensure listener is ready
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  console.log("⏳ Waiting for transaction confirmation...");
+  const tx1 = await userProgram.methods
     .addFunds(amount, Array.from(dummyTxHash))
     .accounts({
       locker: lockerPda,
@@ -137,17 +168,60 @@ async function run() {
       priceUpdate: PRICE_ACCOUNT,
       systemProgram: SystemProgram.programId,
     })
-    .signers([userKeypair])
     .rpc();
 
   console.log(`✅ Funds added: ${tx1}`);
 
-  // Wait for REAL event - fixed time
-  console.log("⏳ Waiting 5 seconds for REAL event...");
-  await new Promise(resolve => setTimeout(resolve, 5000));
-  
+  // Wait for REAL event - increased wait time
+  console.log("⏳ Waiting 10 seconds for REAL event...");
+  await new Promise(resolve => setTimeout(resolve, 10000));
+
   // Remove listener
-  program.removeEventListener(listener);
+  userProgram.removeEventListener(listener);
+  console.log("📡 Event listener removed");
+
+  // Fallback: If event wasn't received, fetch it directly from the transaction
+  if (!eventReceived) {
+    console.log("📡 Event not received via listener, fetching from transaction...");
+    try {
+      const tx = await connection.getTransaction(tx1, {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: 0
+      });
+
+      if (tx?.meta?.logMessages) {
+        const eventLog = tx.meta.logMessages.find(log =>
+          log.includes("Program log: Event: fundsAddedEvent")
+        );
+
+        if (eventLog) {
+          console.log("\n📡 Event found in transaction logs:");
+          console.log(eventLog);
+
+          // Parse the event data from the log
+          const eventData = eventLog.split("Event: fundsAddedEvent")[1];
+          if (eventData) {
+            try {
+              const parsedEvent = JSON.parse(eventData);
+              console.log("\n📡 Parsed event data:");
+              console.log(`👤 User: ${parsedEvent.user}`);
+              console.log(`💰 SOL Amount: ${parsedEvent.solAmount} lamports (${parsedEvent.solAmount / LAMPORTS_PER_SOL} SOL)`);
+
+              // Calculate USD value using the raw number and exponent
+              const usdValue = parsedEvent.usdEquivalent * Math.pow(10, parsedEvent.usdExponent);
+              console.log(`💵 USD Equivalent: $${usdValue.toFixed(2)} (raw: ${parsedEvent.usdEquivalent}, exp: ${parsedEvent.usdExponent})`);
+            } catch (e) {
+              console.log("Could not parse event data from log");
+            }
+          }
+        } else {
+          console.log("❌ No event found in transaction logs");
+        }
+      }
+    } catch (error) {
+      console.log("❌ Error fetching transaction:", error);
+    }
+  }
 
   const userBalanceAfter = await connection.getBalance(user);
   const vaultBalanceAfter = await connection.getBalance(vaultPda);
