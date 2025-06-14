@@ -5,7 +5,7 @@ use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2
 declare_id!("3zrWaMknHTRQpZSxY4BvQxw9TStSXiHcmcp3NMPTFkke");
 
 pub const FEED_ID: &str = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d";
-pub const MAXIMUM_AGE: u64 = 600;
+pub const MAXIMUM_AGE: u64 = 6000;
 
 // Private helper function for price calculation
 fn calculate_sol_price(price_update: &Account<PriceUpdateV2>) -> Result<PriceData> {
