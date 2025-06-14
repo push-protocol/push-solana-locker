@@ -17,10 +17,10 @@ const LOCKER_SEED = "locker";
 
 // Load keypairs
 const adminKeypair = Keypair.fromSecretKey(
-  Uint8Array.from(JSON.parse(fs.readFileSync("phantom-keypair.json", "utf8")))
+  Uint8Array.from(JSON.parse(fs.readFileSync("upgrade-keypair.json", "utf8")))
 );
 const userKeypair = Keypair.fromSecretKey(
-  Uint8Array.from(JSON.parse(fs.readFileSync("new-user-keypair.json", "utf8")))
+  Uint8Array.from(JSON.parse(fs.readFileSync("clean-user-keypair.json", "utf8")))
 );
 
 // Set up connection and provider

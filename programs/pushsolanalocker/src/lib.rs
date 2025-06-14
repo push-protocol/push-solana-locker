@@ -2,6 +2,28 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::{program::invoke_signed, system_instruction, program::invoke};
 
+declare_id!("3zrWaMknHTRQpZSxY4BvQxw9TStSXiHcmcp3NMPTFkke");
+
+pub const FEED_ID: &str = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d";
+pub const MAXIMUM_AGE: u64 = 6000;
+
+// Private helper function for price calculation
+fn calculate_sol_price(price_update: &Account<PriceUpdateV2>) -> Result<PriceData> {
+    let price = price_update.get_price_no_older_than(
+        &Clock::get()?,
+        MAXIMUM_AGE,
+        &get_feed_id_from_hex(FEED_ID)?,
+    )?;
+
+    require!(price.price > 0, LockerError::InvalidPrice);
+
+    Ok(PriceData {
+        price: price.price,
+        exponent: price.exponent,
+        publish_time: price.publish_time,
+        confidence: price.conf,
+    })
+}
 declare_id!("FVnnKN3tmbSuWcHbc8anrXZnzETHn96FdaKcJxamrfFx");
 
 #[program]
@@ -130,6 +152,27 @@ pub struct RecoverTokens<'info> {
     pub admin: Signer<'info>,
 
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct GetSolPrice<'info> {
+    pub price_update: Account<'info, PriceUpdateV2>,
+}
+
+#[derive(Accounts)]
+pub struct ChangeAdmin<'info> {
+    #[account(mut)]
+    pub locker_data: Account<'info, Locker>,
+    #[account(mut)]
+    pub admin: Signer<'info>,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct PriceData {
+    pub price: i64,            // Raw price from Pyth
+    pub exponent: i32,         // Exponent to apply
+    pub publish_time: i64,     // When the price was published
+    pub confidence: u64,       // Price confidence interval
 }
 
 #[account]

@@ -12,9 +12,9 @@ url = "https://api.apr.dev"
 
 [provider]
 # cluster = "Localnet"
-# cluster = "https://api.devnet.solana.com"
-cluster = "https://api.testnet.solana.com"
-wallet = "./phantom-keypair.json"
+cluster = "https://api.devnet.solana.com"
+# cluster = "https://api.testnet.solana.com"
+wallet = "./upgrade-keypair.json"
 
 
 [scripts]
