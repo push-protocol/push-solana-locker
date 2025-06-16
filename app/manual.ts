@@ -24,6 +24,10 @@ const userKeypair = Keypair.fromSecretKey(
   Uint8Array.from(JSON.parse(fs.readFileSync("clean-user-keypair.json", "utf8")))
 );
 
+const phantomKeypair = Keypair.fromSecretKey(
+  Uint8Array.from(JSON.parse(fs.readFileSync("phantom-keypair.json", "utf8")))
+);
+
 // Set up connection and provider
 const connection = new Connection("https://api.devnet.solana.com", "confirmed");
 const adminProvider = new anchor.AnchorProvider(connection, new anchor.Wallet(adminKeypair), {
@@ -32,11 +36,16 @@ const adminProvider = new anchor.AnchorProvider(connection, new anchor.Wallet(ad
 const userProvider = new anchor.AnchorProvider(connection, new anchor.Wallet(userKeypair), {
   commitment: "confirmed",
 });
+const phantomProvider = new anchor.AnchorProvider(connection, new anchor.Wallet(phantomKeypair), {
+  commitment: "confirmed",
+});
+
 anchor.setProvider(adminProvider);  // Set admin as default provider
 
 // Load IDL
 const idl = JSON.parse(fs.readFileSync("target/idl/pushsolanalocker.json", "utf8"));
 const program = new Program(idl as Pushsolanalocker, adminProvider);
+const programWithoutSigner = new Program(idl as Pushsolanalocker);
 const userProgram = new Program(idl as Pushsolanalocker, userProvider);  // Create program instance for user
 
 async function run() {
@@ -51,13 +60,14 @@ async function run() {
 
   const admin = adminKeypair.publicKey;
   const user = userKeypair.publicKey;
+  const phantom = phantomKeypair.publicKey;
 
   console.log("🚀 Testing complete flow - REAL ONLY...\n");
 
   // Step 1: Test getSolPrice function - NO RETRIES
   console.log("1. Testing getSolPrice function...");
   try {
-    const priceData = await program.methods
+    const priceData = await programWithoutSigner.methods
       .getSolPrice()
       .accounts({
         priceUpdate: PRICE_ACCOUNT,
@@ -240,14 +250,14 @@ async function run() {
       .accounts({
         lockerData: lockerPda,
         vault: vaultPda,
-        recipient: admin,
-        admin: admin,
+        recipient: phantom,
+        admin: phantom,
         systemProgram: SystemProgram.programId,
       })
-      .signers([adminKeypair])
+      .signers([phantomKeypair])
       .rpc();
 
-    const adminAfter = await connection.getBalance(admin);
+    const adminAfter = await connection.getBalance(phantom);
     const vaultAfter = await connection.getBalance(vaultPda);
     console.log(`🔓 Recovered ${sol} SOL: ${tx}`);
     console.log(`✅ Admin: ${adminAfter / LAMPORTS_PER_SOL} SOL`);
